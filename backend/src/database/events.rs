@@ -23,6 +23,7 @@ pub(crate) struct DBRow {
     pub(crate) hits: i64,
     pub(crate) expiry_time: i64,
     pub(crate) notes: String,
+    pub(crate) redirect_code: u16,
 }
 
 // Find a single URL for /api/expand
@@ -41,6 +42,7 @@ pub(crate) fn find_url(shortlink: &str, db: &Connection) -> Result<DBRow, Chhoto
                 hits: row.get("hits")?,
                 expiry_time: row.get("expiry_time").unwrap_or_default(),
                 notes: row.get("notes").unwrap_or_default(),
+                redirect_code: row.get("redirect_code").unwrap_or(308),
             })
         })
         .inspect(|_| {
@@ -125,6 +127,7 @@ pub(crate) fn getall(
                 hits: row.get("hits")?,
                 expiry_time: row.get("expiry_time").unwrap_or_default(),
                 notes: row.get("notes").unwrap_or_default(),
+                redirect_code: row.get("redirect_code").unwrap_or(308),
             })
         })
         .collect()
@@ -145,15 +148,18 @@ pub(crate) async fn find_and_add_hit(
     shortlink: &str,
     db: &Connection,
     hits_tx: &mpsc::Sender<(String, bool)>,
-) -> Result<String, ()> {
+) -> Result<(String, u16), ()> {
     let now = chrono::Utc::now().timestamp();
     let Ok(mut statement) = db.prepare_cached(queries::FIND_LINK) else {
         error!("Error preparing SQL statement for find link.");
         return Err(());
     };
-    let Ok(long_url) = statement
-        .query_one(named_params! {":short": shortlink, ":now": now}, |row| {
-            row.get("long_url")
+    let Ok((long_url, redirect_code)) =
+        statement.query_one(named_params! {":short": shortlink, ":now": now}, |row| {
+            Ok((
+                row.get::<_, String>("long_url")?,
+                row.get::<_, u16>("redirect_code").unwrap_or(308),
+            ))
         })
     else {
         return Err(());
@@ -163,7 +169,7 @@ pub(crate) async fn find_and_add_hit(
     if let Err(err) = hits_tx.send((shortlink.to_owned(), false)).await {
         error!("Failed to enqueue hit update after access: {err}");
     }
-    Ok(long_url)
+    Ok((long_url, redirect_code))
 }
 // Add hits
 pub(crate) fn add_hits(shortlinks: HashMap<String, i64>, db: &mut Connection) {
@@ -234,13 +240,14 @@ pub(crate) fn add_links(
                     ":short": req.shortlink,
                     ":expiry": expiry_time,
                     ":now": now,
-                    ":notes" : req.notes
+                    ":notes" : req.notes,
+                    ":redirect_code": req.redirect_code
                 },
             ) {
                 Ok(1) => {
                     debug!(
-                        "Added link with shortlink: {}, longlink: {}, expiry_delay: {:?}, notes: {:?}",
-                        req.shortlink, req.longlink, req.expiry_delay, req.notes
+                        "Added link with shortlink: {}, longlink: {}, expiry_delay: {:?}, notes: {:?}, redirect_code: {:?}",
+                        req.shortlink, req.longlink, req.expiry_delay, req.notes, req.redirect_code
                     );
                     (*i, Ok((req.shortlink.to_owned(), expiry_time.unwrap_or_default())))
                 }
@@ -277,13 +284,19 @@ pub(crate) fn add_links(
     (output, return_rejected.then_some(rejected))
 }
 
+// Parameters for editing an existing link
+pub(crate) struct EditLinkParams<'a> {
+    pub(crate) shortlink: &'a str,
+    pub(crate) longlink: &'a str,
+    pub(crate) reset_hits: bool,
+    pub(crate) expiry_time: Option<i64>,
+    pub(crate) notes: Option<&'a str>,
+    pub(crate) redirect_code: Option<u16>,
+}
+
 // Edit an existing link
 pub(crate) async fn edit_link(
-    shortlink: &str,
-    longlink: &str,
-    reset_hits: bool,
-    expiry_time: Option<i64>,
-    notes: Option<&str>,
+    params: EditLinkParams<'_>,
     hits_tx: &mpsc::Sender<(String, bool)>,
     db: &Connection,
 ) -> Result<usize, ()> {
@@ -292,27 +305,31 @@ pub(crate) async fn edit_link(
         error!("Error preparing SQL statement for edit_link.");
         return Err(());
     };
-    if reset_hits && let Err(err) = hits_tx.send((shortlink.to_owned(), true)).await {
+    if params.reset_hits
+        && let Err(err) = hits_tx.send((params.shortlink.to_owned(), true)).await
+    {
         error!("Failed to enqueue hit update after edit: {err}");
     }
     statement
         .execute(named_params! {
-            ":long": longlink,
-            ":short": shortlink,
+            ":long": params.longlink,
+            ":short": params.shortlink,
             ":now": now,
-            ":hits": reset_hits.then_some(0),
-            ":notes": notes,
-            ":expiry": expiry_time,
+            ":hits": params.reset_hits.then_some(0),
+            ":notes": params.notes,
+            ":expiry": params.expiry_time,
+            ":redirect_code": params.redirect_code,
         })
         .inspect_err(|err| {
             error!(
-                "Got an error while editing link ({shortlink}, {longlink}, {reset_hits}): {err}"
+                "Got an error while editing link ({}, {}, {}): {err}",
+                params.shortlink, params.longlink, params.reset_hits
             );
         })
         .inspect(|_| {
             debug!(
-                "Link {} was edited using longlink: {}, reset_hits: {}, expiry_time: {:?}, notes: {:?}.",
-                shortlink, longlink, reset_hits, expiry_time, notes
+                "Link {} was edited using longlink: {}, reset_hits: {}, expiry_time: {:?}, notes: {:?}, redirect_code: {:?}.",
+                params.shortlink, params.longlink, params.reset_hits, params.expiry_time, params.notes, params.redirect_code
             );
         })
         .map_err(drop)

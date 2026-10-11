@@ -15,7 +15,7 @@ use url::Url;
 use crate::{
     AppState,
     config::{Config, SlugStyle},
-    database::{self, add_links},
+    database::{self, EditLinkParams, add_links},
     services::types::{
         ChhotoError::{self, ClientError, ServerError},
         GetReqParams, OneOrMany,
@@ -30,6 +30,7 @@ pub(crate) struct NewURLRequest {
     pub(crate) longlink: String,
     pub(crate) expiry_delay: Option<i64>,
     pub(crate) notes: Option<String>,
+    pub(crate) redirect_code: Option<u16>,
 }
 
 // Struct for reading link pairs sent during API call for editing link
@@ -40,6 +41,7 @@ struct EditURLRequest {
     reset_hits: bool,
     expiry_time: Option<i64>,
     notes: Option<String>,
+    redirect_code: Option<u16>,
 }
 
 // Only allow safe URI schemes
@@ -66,6 +68,12 @@ fn is_shortlink_valid(link: &str, allow_capital_letters: bool) -> bool {
 fn is_note_valid(note: &Option<String>) -> bool {
     note.as_ref()
         .is_none_or(|n| n.chars().all(|c| c.is_ascii_graphic() || c == ' '))
+}
+
+// Only allow HTTP 301, 302, 307 and 308 as valid redirect codes
+#[inline]
+fn is_redirect_code_valid(code: Option<u16>) -> bool {
+    code.is_none_or(|c| [301, 302, 307, 308].contains(&c))
 }
 
 // Only have a-z, 0-9, - and _ as valid characters in a shortlink
@@ -171,6 +179,7 @@ pub(super) fn add_links_helper(
 
     let allow_capital_letters = config.allow_capital_letters;
     let public_mode_expiry_delay = config.public_mode_expiry_delay;
+    let use_temp_redirect = config.use_temp_redirect;
 
     let mut output: Vec<_> = (0..chunks.len()).map(|_| Err(ServerError)).collect();
     let (mut with_shortlinks, mut without_shortlinks) = (Vec::new(), Vec::new());
@@ -185,6 +194,11 @@ pub(super) fn add_links_helper(
             _ => exp,
         };
         req.notes = req.notes.filter(|s| !s.is_empty());
+        req.redirect_code =
+            Some(
+                req.redirect_code
+                    .unwrap_or(if use_temp_redirect { 307 } else { 308 }),
+            );
         req
     };
     for (i, req) in chunks.into_iter().enumerate() {
@@ -200,6 +214,10 @@ pub(super) fn add_links_helper(
         } else if !is_note_valid(&req.notes) {
             output[i] = Err(ClientError {
                 reason: "Invalid notes!".to_owned(),
+            });
+        } else if !is_redirect_code_valid(req.redirect_code) {
+            output[i] = Err(ClientError {
+                reason: "Invalid redirect_code!".to_owned(),
             });
         } else if req.shortlink.is_empty() {
             without_shortlinks.push((i, req));
@@ -281,13 +299,20 @@ pub(super) async fn edit_link_helper(
         return Err(ClientError {
             reason: "Invalid notes!".to_owned(),
         });
+    } else if !is_redirect_code_valid(chunks.redirect_code) {
+        return Err(ClientError {
+            reason: "Invalid redirect_code!".to_owned(),
+        });
     }
     let result = database::edit_link(
-        &chunks.shortlink,
-        &chunks.longlink,
-        chunks.reset_hits,
-        chunks.expiry_time.filter(|&t| t > 0),
-        chunks.notes.filter(|s| !s.is_empty()).as_deref(),
+        EditLinkParams {
+            shortlink: &chunks.shortlink,
+            longlink: &chunks.longlink,
+            reset_hits: chunks.reset_hits,
+            expiry_time: chunks.expiry_time.filter(|&t| t > 0),
+            notes: chunks.notes.filter(|s| !s.is_empty()).as_deref(),
+            redirect_code: chunks.redirect_code,
+        },
         hits_tx,
         db,
     )

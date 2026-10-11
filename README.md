@@ -65,6 +65,8 @@ Password: `chhoto-url-demo-pass`
   one. (It's missing in a surprising number of alternatives.)
 - Opening the shortened URL in your browser will instantly redirect you
   to the correct long URL. (So no stupid redirection pages.)
+- The HTTP redirect code (301, 302, 307, or 308) can be chosen per link,
+  with 308 as the default.
 - Super lightweight and snappy. (The docker image is only ~6MB and RAM uasge
   stays under 5MB under normal use.)
 - Counts number of hits for each short link in a privacy respecting way

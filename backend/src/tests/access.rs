@@ -24,6 +24,88 @@ async fn link_resolution() {
 }
 
 #[test]
+async fn redirect_code_selection() {
+    let test = "redirect-code-selection";
+    let conf = default_config(test);
+    let (_tempdir, app) = create_app(&conf, test).await;
+    let api_key = conf.api_key.clone().unwrap();
+
+    for (shortlink, code) in [("r301", 301), ("r302", 302), ("r307", 307), ("r308", 308)] {
+        let (status, _) = add_link_with_code(&app, &api_key, shortlink, code).await;
+        assert!(status.is_success());
+
+        let req = test::TestRequest::get()
+            .uri(&format!("/{shortlink}"))
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status().as_u16(), code);
+        assert_eq!(
+            resp.headers().get("location").unwrap().to_str().unwrap(),
+            format!("https://example-{shortlink}.com")
+        );
+    }
+
+    // Defaults to 308 when no redirect_code is provided
+    let (status, _) = add_link(&app, &api_key, "rdefault", 10, "").await;
+    assert!(status.is_success());
+    let req = test::TestRequest::get().uri("/rdefault").to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status().as_u16(), 308);
+}
+
+#[test]
+async fn invalid_redirect_code() {
+    let test = "invalid-redirect-code";
+    let conf = default_config(test);
+    let (_tempdir, app) = create_app(&conf, test).await;
+    let api_key = conf.api_key.clone().unwrap();
+
+    let (status, reply) = add_link_with_code(&app, &api_key, "bad1", 200).await;
+    assert!(status.is_client_error());
+    assert_eq!(reply.reason, "Invalid redirect_code!");
+
+    let (status, reply) = add_link_with_code(&app, &api_key, "bad2", 0).await;
+    assert!(status.is_client_error());
+    assert_eq!(reply.reason, "Invalid redirect_code!");
+}
+
+#[test]
+async fn edit_redirect_code() {
+    let test = "edit-redirect-code";
+    let conf = default_config(test);
+    let (_tempdir, app) = create_app(&conf, test).await;
+    let api_key = conf.api_key.clone().unwrap();
+
+    let (status, _) = add_link_with_code(&app, &api_key, "e308", 308).await;
+    assert!(status.is_success());
+
+    let req = test::TestRequest::get().uri("/e308").to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status().as_u16(), 308);
+
+    let req = test::TestRequest::put()
+        .uri("/api/edit")
+        .insert_header(("X-API-Key", api_key))
+        .set_payload(
+            r#"{"shortlink":"e308","longlink":"https://edited-e308.com","reset_hits":false,"redirect_code":302}"#,
+        )
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success());
+
+    let req = test::TestRequest::get().uri("/e308").to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status().as_u16(), 302);
+    assert_eq!(
+        resp.headers().get("location").unwrap(),
+        "https://edited-e308.com"
+    );
+
+    let (_, reply) = expand(&app, &conf.api_key.unwrap(), "e308").await;
+    assert_eq!(reply.redirect_code, 302);
+}
+
+#[test]
 async fn link_deletion() {
     let test = "link-deletion";
     let conf = default_config(test);

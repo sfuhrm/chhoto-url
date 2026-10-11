@@ -163,10 +163,11 @@ care about your data. **You've been warned.**
 ### `CHHOTO_REDIRECT_METHOD` \#
 <!-- prettier-ignore-end -->
 
-Sets which redirection is used when a shortlink is resolved.
+Sets which redirection is used when a shortlink is resolved, unless a per-link redirect code has been chosen.
 
 Can be set to `TEMPORARY` or `PERMANENT`, which will enable Temporary 307 or Permanent 308 redirects. Any other value
-will be ignored, and a default of `PERMANENT` will be used.
+will be ignored, and a default of `PERMANENT` will be used. This only acts as the default for newly created links; each
+link can also have its own redirect code (HTTP 301, 302, 307, or 308) chosen at creation or edit time.
 
 ### `CHHOTO_SLUG_STYLE`
 

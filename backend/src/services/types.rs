@@ -75,6 +75,7 @@ pub(super) struct LinkInfo {
     pub(super) hits: i64,
     pub(super) expiry_time: i64,
     pub(super) notes: String,
+    pub(super) redirect_code: u16,
 }
 
 // Struct for query params in /api/all

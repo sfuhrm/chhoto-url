@@ -3,6 +3,7 @@
 
 use actix_web::{
     Either, HttpResponse, Responder, get,
+    http::StatusCode,
     web::{self, Redirect},
 };
 use rusqlite::Connection;
@@ -135,15 +136,16 @@ pub(crate) async fn link_handler(
     data: web::Data<AppState>,
 ) -> impl Responder {
     let shortlink_str = shortlink.as_str();
-    if let Ok(longlink) =
+    if let Ok((longlink, redirect_code)) =
         database::find_and_add_hit(shortlink_str, &data.reader, &data.hits_tx).await
     {
-        if data.config.use_temp_redirect {
-            Either::Left(Redirect::to(longlink))
-        } else {
-            // Defaults to permanent redirection
-            Either::Left(Redirect::to(longlink).permanent())
-        }
+        let status_code = match redirect_code {
+            301 => StatusCode::MOVED_PERMANENTLY,
+            302 => StatusCode::FOUND,
+            307 => StatusCode::TEMPORARY_REDIRECT,
+            _ => StatusCode::PERMANENT_REDIRECT,
+        };
+        Either::Left(Redirect::to(longlink).customize().with_status(status_code))
     } else {
         Either::Right(utils::error404(data).await)
     }

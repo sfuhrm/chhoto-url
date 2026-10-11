@@ -145,6 +145,19 @@
                   autocapitalize="off"
                 />
               </div>
+              <div class="pure-control-group">
+                <label for="redirectCode">Redirect</label>
+                <select
+                  class="chhoto-select"
+                  name="redirectCode"
+                  id="redirectCode"
+                >
+                  <option value="308">308 (Permanent)</option>
+                  <option value="301">301 (Moved Permanently)</option>
+                  <option value="302">302 (Found)</option>
+                  <option value="307">307 (Temporary)</option>
+                </select>
+              </div>
             </details>
           </div>
           <div class="pure-controls" id="controls">
@@ -200,6 +213,7 @@
             <th>Long URL</th>
             <th name="hitsColumn">Hits</th>
             <th name="expiryColumn">Expiry</th>
+            <th name="redirectColumn">Redirect</th>
             <th name="actions">Actions</th>
           </tr>
         </thead>
@@ -329,6 +343,15 @@
               id="edited-expiry"
             />
           </div>
+          <div class="pure-control-group">
+            <label for="edited-redirect">Redirect</label>
+            <select class="chhoto-select" id="edited-redirect">
+              <option value="308">308 (Permanent)</option>
+              <option value="301">301 (Moved Permanently)</option>
+              <option value="302">302 (Found)</option>
+              <option value="307">307 (Temporary)</option>
+            </select>
+          </div>
           <label for="edit-checkbox">
             <input type="checkbox" id="edit-checkbox" />
             Reset hit count
@@ -393,6 +416,10 @@
             <tr>
               <td class="label">Notes:</td>
               <td id="info-notes"></td>
+            </tr>
+            <tr>
+              <td class="label">Redirect:</td>
+              <td id="info-redirect"></td>
             </tr>
           </tbody>
         </table>

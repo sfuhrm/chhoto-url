@@ -45,14 +45,16 @@ curl -X POST \
         "shortlink":"<shortlink>", \
         "longlink":"<longlink>", \
         "expiry_delay": <expiry_delay>, \
-        "notes": "<notes>" \
+        "notes": "<notes>", \
+        "redirect_code": <redirect_code> \
         }' \
     http://localhost:4567/api/new
 ```
 
 If `<shortlink>` is empty or omitted, one will be generated automatically.
 The `<expiry_delay>` is specified in seconds. It is capped to a maximum of 5 years. A missing `<expiry_delay>` or a value of 0 will disable
-expiry.
+expiry. The `<redirect_code>` is optional and may be one of `301`, `302`, `307`, or `308`. If omitted, it defaults to `308` (or `307` if
+[`CHHOTO_REDIRECT_METHOD`](./INSTALLATION.md#chhoto_redirect_method) is set to `TEMPORARY`).
 
 The server will reply in the following format.
 
@@ -163,12 +165,14 @@ curl -X PUT \
     "longlink":"<longlink>", \
     "reset_hits": <bool>, \
     "expiry_time": <time>, \
-    "notes": <notes> \
+    "notes": <notes>, \
+    "redirect_code": <redirect_code> \
     }' \
 http://localhost:4567/api/edit
 ```
 
-The fields `expiry_time` and `notes` are optional. The existing values will be kept in the database if nothing is provided.
+The fields `expiry_time`, `notes` and `redirect_code` are optional. The existing values will be kept in the database if nothing is provided.
+The `<redirect_code>` may be one of `301`, `302`, `307`, or `308`.
 
 The server will reply in the following format.
 
@@ -198,7 +202,8 @@ The server will reply in the following format.
     "longurl": "<longurl>",
     "hits": "<hits>",
     "expiry_time": <expiry_time>,
-    "notes": "<notes>"
+    "notes": "<notes>",
+    "redirect_code": <redirect_code>
 }
 ```
 
@@ -244,7 +249,8 @@ A successful reply would be an array and look like the following.
     "longlink": "<longlink>",
     "hits": <hits>,
     "expiry_time": <expiry_time>,
-    "notes": "<notes>"
+    "notes": "<notes>",
+    "redirect_code": <redirect_code>
   },
     ...
 ]

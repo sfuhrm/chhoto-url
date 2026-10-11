@@ -142,6 +142,7 @@ pub(crate) async fn expand(req: String, auth: Auth, data: web::Data<AppState>) -
                     hits: chunks.hits,
                     expiry_time: chunks.expiry_time,
                     notes: chunks.notes,
+                    redirect_code: chunks.redirect_code,
                 };
                 HttpResponse::Ok().json(body)
             }

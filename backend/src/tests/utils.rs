@@ -34,6 +34,8 @@ pub(super) struct URLData {
     #[serde(default)]
     pub(super) notes: String,
     #[serde(default)]
+    pub(super) redirect_code: u16,
+    #[serde(default)]
     pub(super) reason: String,
 }
 
@@ -136,6 +138,30 @@ pub(super) async fn add_link<
         .insert_header(("X-API-Key", api_key))
         .set_payload(format!(
             "{{\"shortlink\":\"{shortlink}\",\"longlink\":\"https://example-{shortlink}.com\",\"expiry_delay\":{expiry_delay},\"notes\":\"{notes}\"}}"
+        ))
+        .to_request();
+
+    let resp = test::call_service(&app, req).await;
+    let status = resp.status();
+    let body = to_bytes(resp.into_body()).await.unwrap();
+    let url: URLData = serde_json::from_str(body.as_str()).unwrap();
+
+    (status, url)
+}
+
+pub(super) async fn add_link_with_code<
+    T: Service<Request, Response = ServiceResponse, Error = Error>,
+    S: Display,
+>(
+    app: T,
+    api_key: &str,
+    shortlink: S,
+    redirect_code: u16,
+) -> (StatusCode, URLData) {
+    let req = test::TestRequest::post().uri("/api/new")
+        .insert_header(("X-API-Key", api_key))
+        .set_payload(format!(
+            "{{\"shortlink\":\"{shortlink}\",\"longlink\":\"https://example-{shortlink}.com\",\"redirect_code\":{redirect_code}}}"
         ))
         .to_request();
 

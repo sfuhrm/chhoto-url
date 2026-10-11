@@ -10,7 +10,7 @@ use crate::database::queries;
 
 // Some constants
 const APPLICATION_ID: i32 = i32::from_be_bytes(*b"chht"); // MUST NEVER BE CHANGED
-const USER_VERSION: u32 = 4; // Should be incremented on change of schema
+const USER_VERSION: u32 = 5; // Should be incremented on change of schema
 
 // Enum for backup types
 enum BackupType {
@@ -266,6 +266,32 @@ pub(crate) fn init_db(
             .expect("Unable to commit transaction for migration 3.");
         db.execute("VACUUM", ())
             .expect("failed to vacuum database after migration 3.");
+    }
+
+    // Migration 4: Add redirect_code, introduced in 7.9.0
+    if current_user_version < 5 {
+        let has_redirect_code = db
+            .prepare("SELECT 1 FROM pragma_table_info('urls') WHERE name = 'redirect_code'")
+            .and_then(|mut stmt| stmt.exists(()))
+            .unwrap_or(false);
+        if !has_redirect_code {
+            info!("Applying migration 4: Add redirect_code column to urls.");
+            let tx = db
+                .transaction()
+                .expect("Unable to create transaction for migration 4.");
+            tx.execute(
+                "ALTER TABLE urls ADD COLUMN redirect_code INTEGER NOT NULL DEFAULT 308",
+                (),
+            )
+            .expect("Unable to apply migration 4.");
+            tx.pragma_update(None, "user_version", 4)
+                .expect("Unable to set pragma: user_version.");
+            tx.commit()
+                .expect("Unable to commit transaction for migration 4.");
+        } else {
+            db.pragma_update(None, "user_version", 4)
+                .expect("Unable to set pragma: user_version.");
+        }
     }
 
     // Create index on short_url for faster lookups

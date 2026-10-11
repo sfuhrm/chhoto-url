@@ -571,6 +571,10 @@ const TR = (i, row) => {
   expiryTD.setAttribute("label", "Expiry");
   expiryTD.setAttribute("name", "expiryColumn");
 
+  const redirectTD = TD(row["redirect_code"], null);
+  redirectTD.setAttribute("label", "Redirect");
+  redirectTD.setAttribute("name", "redirectColumn");
+
   const actionsTD = document.createElement("td");
   actionsTD.setAttribute("name", "actions");
   actionsTD.setAttribute("label", "Actions");
@@ -580,11 +584,11 @@ const TR = (i, row) => {
   btnGrp.appendChild(copyButton(shortlink));
   btnGrp.appendChild(qrCodeButton(shortlink));
   btnGrp.appendChild(infoButton(shortlink));
-  btnGrp.appendChild(editButton(shortlink, longlink, expiryTime, row["notes"]));
+  btnGrp.appendChild(editButton(shortlink, longlink, expiryTime, row["notes"], row["redirect_code"]));
   btnGrp.appendChild(deleteButton(shortlink));
   actionsTD.appendChild(btnGrp);
 
-  for (const td of [numTD, shortTD, longTD, hitsTD, expiryTD, actionsTD]) {
+  for (const td of [numTD, shortTD, longTD, hitsTD, expiryTD, redirectTD, actionsTD]) {
     tr.appendChild(td);
   }
   return tr;
@@ -647,7 +651,7 @@ const copyButton = (shortUrl) => {
   return btn;
 };
 
-const editButton = (shortUrl, longUrl, expiry, notes) => {
+const editButton = (shortUrl, longUrl, expiry, notes, redirectCode) => {
   const btn = document.createElement("button");
   btn.classList.add("svg-button");
   btn.innerHTML = SVG_EDIT_BUTTON;
@@ -663,6 +667,7 @@ const editButton = (shortUrl, longUrl, expiry, notes) => {
       document.getElementById("edit-checkbox").checked = false;
       editedUrl.value = longUrl;
       document.getElementById("edited-notes").value = notes;
+      document.getElementById("edited-redirect").value = redirectCode;
       if (expiry > 0) {
         const date = new Date(expiry * 1000);
         const local_expiry = new Date(
@@ -727,6 +732,7 @@ const infoButton = (shortUrl) => {
         : "Disabled";
     document.getElementById("info-expiry").textContent = accurateExpiryTime;
     document.getElementById("info-notes").textContent = row.notes;
+    document.getElementById("info-redirect").textContent = row.redirect_code;
   };
   return btn;
 };
@@ -838,11 +844,13 @@ const submitForm = () => {
   const longUrl = form.elements["longUrl"];
   const shortUrl = form.elements["shortUrl"];
   const expiryDelay = form.elements["expiryDelay"];
+  const redirectCode = form.elements["redirectCode"];
   const data = {
     longlink: longUrl.value,
     shortlink: shortUrl.value,
     expiry_delay: parseInt(expiryDelay.value),
     notes: notes.value,
+    redirect_code: parseInt(redirectCode.value),
   };
 
   const url = prepSubdir("/api/new");
@@ -862,6 +870,7 @@ const submitForm = () => {
       shortUrl.value = "";
       expiryDelay.value = 0;
       notes.value = "";
+      redirectCode.value = 308;
       if (ADMIN) {
         const params = new URLSearchParams();
         params.append("page_size", 1);
@@ -940,6 +949,9 @@ const submitEdit = () => {
   const shortUrl = editUrlSpan.textContent;
   const checkBox = document.getElementById("edit-checkbox");
   const notes = document.getElementById("edited-notes").value;
+  const redirectCode = parseInt(
+    document.getElementById("edited-redirect").value,
+  );
   let expiry = 0;
   const expiry_raw = document.getElementById("edited-expiry").value;
   if (expiry_raw != "") {
@@ -952,6 +964,7 @@ const submitEdit = () => {
       reset_hits: checkBox.checked,
       notes: notes,
       expiry_time: expiry,
+      redirect_code: redirectCode,
     };
     const url = prepSubdir("/api/edit");
     let ok = false;
@@ -979,6 +992,7 @@ const submitEdit = () => {
           LOCAL_DATA[editedIndex]["longlink"] = longUrl;
           LOCAL_DATA[editedIndex]["notes"] = notes;
           LOCAL_DATA[editedIndex]["expiry_time"] = expiry;
+          LOCAL_DATA[editedIndex]["redirect_code"] = redirectCode;
           if (checkBox.checked) {
             LOCAL_DATA[editedIndex]["hits"] = 0;
           }

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 pub(super) const FIND_URL: &str = "
-SELECT long_url, hits, expiry_time, notes FROM urls
+SELECT long_url, hits, expiry_time, notes, redirect_code FROM urls
   WHERE short_url = :short
     AND (
       expiry_time IS NULL 
@@ -10,7 +10,7 @@ SELECT long_url, hits, expiry_time, notes FROM urls
     )";
 
 pub(super) const FIND_LINK: &str = "
-SELECT long_url FROM urls 
+SELECT long_url, redirect_code FROM urls 
   WHERE short_url = :short 
     AND (
       expiry_time IS NULL 
@@ -24,10 +24,10 @@ UPDATE urls
 
 pub(super) const ADD_LINK: &str = "
 INSERT INTO urls
-  (long_url, short_url, hits, expiry_time, notes)
-  VALUES (:long, :short, 0, :expiry, :notes)
+  (long_url, short_url, hits, expiry_time, notes, redirect_code)
+  VALUES (:long, :short, 0, :expiry, :notes, :redirect_code)
 ON CONFLICT(short_url) DO UPDATE 
-  SET long_url = :long, hits = 0, expiry_time = :expiry, notes = :notes
+  SET long_url = :long, hits = 0, expiry_time = :expiry, notes = :notes, redirect_code = :redirect_code
   WHERE short_url = :short 
     AND expiry_time <= :now
     AND expiry_time IS NOT NULL";
@@ -41,7 +41,8 @@ CREATE TABLE urls (
   long_url TEXT NOT NULL,
   hits INTEGER NOT NULL,
   expiry_time INTEGER,
-  notes TEXT
+  notes TEXT,
+  redirect_code INTEGER NOT NULL DEFAULT 308
 )";
 
 pub(super) const CLEANUP: &str =
@@ -94,7 +95,8 @@ UPDATE urls
     long_url = :long,
     hits = COALESCE(:hits, hits),
     notes = COALESCE(:notes, notes),
-    expiry_time = COALESCE(:expiry, expiry_time)
+    expiry_time = COALESCE(:expiry, expiry_time),
+    redirect_code = COALESCE(:redirect_code, redirect_code)
   WHERE short_url = :short
     AND (expiry_time IS NULL OR expiry_time > :now)
 ";
@@ -102,8 +104,8 @@ UPDATE urls
 pub(super) const GETALL_QUERIES: [&str; 4] = [
     // 0 => standard
     "
-SELECT short_url, long_url, hits, expiry_time, notes FROM (
-  SELECT t.id, t.short_url, t.long_url, t.hits, t.expiry_time, t.notes
+SELECT short_url, long_url, hits, expiry_time, notes, redirect_code FROM (
+  SELECT t.id, t.short_url, t.long_url, t.hits, t.expiry_time, t.notes, t.redirect_code
   FROM urls AS t
   WHERE (
     t.expiry_time IS NULL
@@ -115,8 +117,8 @@ SELECT short_url, long_url, hits, expiry_time, notes FROM (
 ORDER BY id ASC",
     // 1 => cursor
     "
-SELECT short_url, long_url, hits, expiry_time, notes FROM (
-  SELECT t.id, t.short_url, t.long_url, t.hits, t.expiry_time, t.notes
+SELECT short_url, long_url, hits, expiry_time, notes, redirect_code FROM (
+  SELECT t.id, t.short_url, t.long_url, t.hits, t.expiry_time, t.notes, t.redirect_code
   FROM urls AS t
   JOIN urls AS u
     ON u.short_url = :pos
@@ -131,8 +133,8 @@ SELECT short_url, long_url, hits, expiry_time, notes FROM (
 ) ORDER BY id ASC",
     // 2 => standard + fts
     "
-SELECT short_url, long_url, hits, expiry_time, notes FROM (
-  SELECT t.id, t.short_url, t.long_url, t.hits, t.expiry_time, t.notes
+SELECT short_url, long_url, hits, expiry_time, notes, redirect_code FROM (
+  SELECT t.id, t.short_url, t.long_url, t.hits, t.expiry_time, t.notes, t.redirect_code
   FROM urls AS t
   JOIN urls_fts AS f
     ON t.id = f.rowid
@@ -147,8 +149,8 @@ SELECT short_url, long_url, hits, expiry_time, notes FROM (
 ORDER BY id ASC",
     // 3 => cursor + fts
     "
-SELECT short_url, long_url, hits, expiry_time, notes FROM (
-  SELECT t.id, t.short_url, t.long_url, t.hits, t.expiry_time, t.notes
+SELECT short_url, long_url, hits, expiry_time, notes, redirect_code FROM (
+  SELECT t.id, t.short_url, t.long_url, t.hits, t.expiry_time, t.notes, t.redirect_code
   FROM urls AS t
   JOIN urls AS u
     ON u.short_url = :pos
